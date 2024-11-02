@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Human Animation</title> 
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        #controls {
+			display: flex;
+			flex-direction: column;
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+        }
+        button {
+            margin: 5px;
+            padding: 10px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+		<label for="human-select">Select Human:</label>
+		<select id="human-select">
+			<option value="0">Human 0</option>
+			<option value="1">Human 1</option>
+			<option value="2">Human 2</option>
+			<!-- Add more options as needed -->
+		</select>
+		<button id="turn-left">Z +</button>
+		<button id="turn-right">Z -</button>
+		<button id="move-forward">X +</button>
+		<button id="move-backward">X -</button>
+	</div>
+	
+    <script type="module" src="main.js"></script>
+</body>
+</html>

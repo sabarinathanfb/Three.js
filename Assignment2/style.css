@@ -1,0 +1,39 @@
+* {
+    margin: 0;
+    padding: 0; /* Removed extra semicolon */
+}
+
+body {
+    margin: 0;
+    overflow: hidden;
+    width: 100vw; /* Ensure full viewport width */
+    height: 100vh; /* Ensure full viewport height */
+}
+
+.container {
+    position: absolute; /* Positioning it absolutely may help in some layouts */
+    top: 0; /* Start from the top */
+    left: 0; /* Start from the left */
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+}
+
+canvas {
+    display: block; /* Prevents unwanted margins */
+    width: 100%; /* Full width of the viewport */
+    height: 100%; /* Full height of the viewport */
+}
+
+#viewToggle { 
+    position: absolute; 
+    top: 10px; 
+    left: 10px; 
+    z-index: 10; 
+}
+
+#objectSelector { 
+    position: absolute; 
+    top: 10px; 
+    left: 150px; /* Adjusted left margin for separation */
+    z-index: 10; 
+}
