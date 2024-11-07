@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { FontLoader } from 'three/examples/jsm/loaders/FontLoader';
+import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import {QuadTree} from './src/models/QuadTree';
@@ -10,6 +12,7 @@ import {QuadTree} from './src/models/QuadTree';
 let scene, camera, renderer, controls, stats;
 let layoutModel, botModel;
 let collidableObjects = [];
+let zoneList = [];
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 let selectedObject = null;
@@ -108,9 +111,9 @@ function init() {
 
     // ================== EVENT LISTENERS ==================
     window.addEventListener('resize', handleWindowResize);
-    window.addEventListener('mousedown', handleMouseDown);
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    // window.addEventListener('mousedown', handleMouseDown);
+    // window.addEventListener('mousemove', handleMouseMove);
+    // window.addEventListener('mouseup', handleMouseUp);
     document.addEventListener('keydown', handleKeyDown);
 
 
@@ -201,6 +204,7 @@ function loadBotModel() {
         const animations = gltf.animations;
         mixer = new THREE.AnimationMixer(botModel);
 
+        selectedObject = botModel;
         animations.forEach((clip) => {
             const name = clip.name;
             if (baseActions[name]) {
@@ -311,22 +315,22 @@ function updateBotPosition(botPosition) {
     previousPosition = { x: botPosition.x, y: botPosition.y, z: botPosition.z };
 }
 
-// function drawLine(startPosition, endPosition) {
-//     const material = new THREE.LineBasicMaterial({ color: 0x00ff00 }); // Green line for path
+function drawLine(startPosition, endPosition) {
+    const material = new THREE.LineBasicMaterial({ color: 0x00ff00 }); // Green line for path
 
-//     const points = [];
-//     points.push(new THREE.Vector3(startPosition.x, startPosition.y, startPosition.z));
-//     points.push(new THREE.Vector3(endPosition.x, endPosition.y, endPosition.z));
+    const points = [];
+    points.push(new THREE.Vector3(startPosition.x, startPosition.y, startPosition.z));
+    points.push(new THREE.Vector3(endPosition.x, endPosition.y, endPosition.z));
 
-//     const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
 
-//     const line = new THREE.Line(geometry, material);
-//     line.position.y = 1;
-//     scene.add(line);
+    const line = new THREE.Line(geometry, material);
+    line.position.y = 1;
+    scene.add(line);
 
-//     // Store the line so that it can be managed later if needed
-//     pathLines.push(line);
-// }
+    // Store the line so that it can be managed later if needed
+    pathLines.push(line);
+}
 document.getElementById('bot_1_button').addEventListener('click', () => {
     drawBotLine('bot1'); // Call the function to draw the line for bot1
 });
@@ -390,34 +394,35 @@ document.getElementById('getEntriesButton').addEventListener('click', () => {
 // ================== KEYBOARD CONTROLS ==================
 let isWalking = false; // Flag to track if the bot is currently walking
 function handleKeyDown(event) {
-    if (botModel) {
+    if (selectedObject) {
         const moveDistance = 10; // Movement distance
-        const originalPosition = botModel.position.clone(); // Store the original position
+        const originalPosition = selectedObject.position.clone(); // Store the original position
 
         // Move the bot based on the key pressed
         switch (event.code) {
             case 'ArrowRight':
-                botModel.position.x += moveDistance; // Move right
+                selectedObject.position.x += moveDistance; // Move right
                 break;
             case 'ArrowLeft':
-                botModel.position.x -= moveDistance; // Move left
+                selectedObject.position.x -= moveDistance; // Move left
                 break;
             case 'ArrowUp':
-                botModel.position.z -= moveDistance; // Move forward
+                selectedObject.position.z -= moveDistance; // Move forward
                 break;
             case 'ArrowDown':
-                botModel.position.z += moveDistance; // Move backward
+                selectedObject.position.z += moveDistance; // Move backward
                 break;
         }
 
+        checkBotInZone(selectedObject);
         // Check for collisions after moving
-        const collidedObject = hasCollision(botModel);
+        const collidedObject = hasCollision(selectedObject);
         if (collidedObject) {
-            botModel.position.copy(originalPosition); // Reset position if collision occurs
+            selectedObject.position.copy(originalPosition); // Reset position if collision occurs
             console.log('Collision detected with:', collidedObject.name); // Log the colliding object name
-            console.log('Collision position:', botModel.position);
+            console.log('Collision position:', selectedObject.position);
         } else {
-            updateBotPosition({x:botModel.position.x,z:botModel.position.z});
+            // updateBotPosition({x:selectedObject.position.x,z:selectedObject.position.z});
         }
     }
 }
@@ -458,12 +463,207 @@ document.addEventListener('keyup', () => {
     }
 });
 
+function createBoxFromPoints(width, height, positionX, positionZ, zoneName) {
+    // Create the box geometry (this will define the shape)
+    const boxGeometry = new THREE.BoxGeometry(width, 0.01, height);
 
+    // Create the edges geometry from the box geometry
+    const edgesGeometry = new THREE.EdgesGeometry(boxGeometry);
+
+    // Create a line material for the edges
+    const lineMaterial = new THREE.LineBasicMaterial({ color: 'green' });
+
+    // Create the line segments that represent the border of the box
+    const borderBox = new THREE.LineSegments(edgesGeometry, lineMaterial);
+
+    // Optionally position the box on the ground (set y position)
+    borderBox.position.set(positionX, 1, positionZ);
+
+    // Create a group to hold both borderBox and textMesh
+    const zoneGroup = new THREE.Group();
+    
+    // Add the border box to the group
+    zoneGroup.add(borderBox);
+
+    const fontLoader = new FontLoader();
+
+    // Load the font file and create the text
+    fontLoader.load('./assets/fonts/gentilis_bold.typeface.json', function (font) {
+        const textGeometry = new TextGeometry(zoneName, {
+            font: font,
+            size: 10,              // Adjust text size as needed
+            depth: 1,             // Depth of the text
+            curveSegments: 12,     // Number of segments for curves
+            bevelEnabled: true,    // Enable/Disable bevel
+            bevelThickness: 0.2,   // Thickness of the bevel
+            bevelSize: 0.1,        // Distance from text outline to bevel
+            bevelOffset: 0,
+            bevelSegments: 3
+        });
+
+        // Center the text inside the box
+        textGeometry.computeBoundingBox();
+        const textWidth = textGeometry.boundingBox.max.x - textGeometry.boundingBox.min.x;
+        const textHeight = textGeometry.boundingBox.max.y - textGeometry.boundingBox.min.y;
+
+        const textMesh = new THREE.Mesh(textGeometry, new THREE.MeshBasicMaterial({ color: 0xffffff }));
+
+        // Position the text in the center of the box
+        textMesh.position.set(positionX - width / 2 + textWidth / 2, 1, positionZ);
+        textMesh.rotation.x = -Math.PI / 2;
+
+        // Add the text to the group
+        zoneGroup.add(textMesh);
+    });
+
+    // Add the group to the scene
+    scene.add(zoneGroup);
+
+    // Return the group for further manipulation if needed
+    return { zoneGroup,zoneName, hasEntered: false };
+}
+
+function deleteZone(zoneName) {
+    // Find the zone object by its name in the array
+    const zoneIndex = zoneList.findIndex(zone => zone.zoneName === zoneName);
+
+    if (zoneIndex !== -1) {
+        const zone = zoneList[zoneIndex];
+
+        // Remove the border box and the text from the scene
+        scene.remove(zone.zoneGroup);
+
+        // Remove the zone from the list
+        zoneList.splice(zoneIndex, 1);
+        console.log(`Zone "${zoneName}" has been deleted.`);
+        console.log(zoneList);
+    } else {
+        console.warn(`No zone found with the name "${zoneName}".`);
+    }
+}
+// Function to check if the bot has entered a zone
+function checkBotInZone(bot) {
+    const botPosition = bot.position;
+    console.log("checking bot is inside zone");
+    zoneList.forEach(zone => {
+        const boxPos = zone.zoneGroup.children[0].position
+        console.log(boxPos);
+        const geometry = zone.zoneGroup.children[0].geometry.parameters.geometry.parameters
+        const width = geometry.width;
+        const depth = geometry.depth;
+
+        // Calculate the zone's boundaries based on its position and size
+        const minX = boxPos.x - width / 2;
+        const maxX = boxPos.x + width / 2;
+        const minZ = boxPos.z - depth / 2;
+        const maxZ = boxPos.z + depth / 2;
+
+        console.log("Zone boundaries:");
+        console.log("minX:", minX, "maxX:", maxX);
+        console.log("minZ:", minZ, "maxZ:", maxZ);
+        console.log("Bot position:", botPosition.x, botPosition.z);
+
+        if (botPosition.x >= minX && botPosition.x <= maxX &&
+            botPosition.z >= minZ && botPosition.z <= maxZ) {
+
+            // Check if the bot has already entered the zone
+            if (!zone.hasEntered) {
+                console.log("Bot enters zone");
+
+                // Bot has entered the zone for the first time, trigger alert
+                alert(`${bot.name} entered ${zone.zoneName}`);
+
+                // Set the flag to true so the alert won't trigger again for this zone
+                zone.hasEntered = true;
+            }
+           
+        }else {
+            // If the bot has entered the zone previously and is now outside, trigger exit alert
+            if (zone.hasEntered) {
+                console.log("Bot exits zone");
+    
+                // Bot has exited the zone, trigger exit alert
+                alert(`${bot.name} exited ${zone.zoneName}`);
+    
+                // Set the flag to false so the entry alert can trigger again next time
+                zone.hasEntered = false;
+            }
+        }
+    });
+}
 
 // ================== ANIMATION CONTROLS ==================
 function createPanel() {
 
     const panel = new GUI( { width: 310 } );
+
+    // Folder for zone management
+    const zoneFolder = panel.addFolder('Zone Management');
+
+    // Zone object to store data
+    const zoneData = {
+        width: 10,
+        height: 10,
+        positionX: 0,
+        positionZ: 0,
+        zoneName: 'Zone 1'
+    };
+    // Add controls for zone properties
+    zoneFolder.add(zoneData, 'zoneName').name('Zone Name');
+    zoneFolder.add(zoneData, 'width', 1, 100).name('Width');
+    zoneFolder.add(zoneData, 'height', 1, 100).name('Height');
+    zoneFolder.add(zoneData, 'positionX', -500, 500).name('Position X');
+    zoneFolder.add(zoneData, 'positionZ', -500, 500).name('Position Z');
+
+    // Button to create zone
+    zoneFolder.add({
+        createZone: () => {
+            const zoneName = zoneData.zoneName;
+
+            // Check if zone already exists
+            if (!zoneList.some(zone => zone.zoneName === zoneName)) {
+                // Create zone
+                const newZone = createBoxFromPoints(zoneData.width, zoneData.height, zoneData.positionX, zoneData.positionZ, zoneName);
+
+                // Store the entire zone object (borderBox, textMesh, and zoneName)
+                zoneList.push(newZone);
+                console.log(zoneList);
+                updateZoneList();
+            } else {
+                console.warn('Zone with this name already exists.');
+            }
+        }
+    }, 'createZone').name('Create Zone');
+
+    // Dropdown to show created zones
+    let zoneDropdown = zoneFolder.add({ selectedZone: '' }, 'selectedZone', zoneList.map(zone => zone.zoneName)).name('Select Zone');
+
+    // Button to delete selected zone
+    zoneFolder.add({
+        deleteZone: () => {
+            const zoneName = zoneDropdown.getValue();
+
+            // Check if selected zone exists
+            const index = zoneList.findIndex(zone => zone.zoneName === zoneName);
+            if (index !== -1) {
+                // Delete zone from Three.js scene
+                deleteZone(zoneName);
+                console.log('Zone deleted:', zoneName);
+                updateZoneList();
+            } else {
+                console.warn('No zone selected or zone does not exist.');
+            }
+        }
+    }, 'deleteZone').name('Delete Selected Zone');
+
+    // Function to update dropdown list when zones are added or deleted
+    function updateZoneList() {
+        const zoneNames = zoneList.map(zone => zone.zoneName);
+        zoneDropdown = zoneDropdown.options(zoneNames.length ? zoneNames : ['']);
+        zoneDropdown.setValue(zoneNames.length ? zoneNames[0] : '');
+    }
+
+    zoneFolder.open();
 
     const folder1 = panel.addFolder( 'Base Actions' );
     const folder3 = panel.addFolder( 'General Speed' );
