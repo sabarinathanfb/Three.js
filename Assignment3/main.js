@@ -13,6 +13,7 @@ let scene, camera, renderer, controls, stats;
 let layoutModel, botModel;
 let collidableObjects = [];
 let zoneList = [];
+let botList = [];
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 let selectedObject = null;
@@ -123,6 +124,41 @@ function init() {
     animate();
 }
 
+const botDropdown = document.getElementById('botDropdown');
+
+// Function to update the dropdown with the bot names
+function updateBotDropdown() {
+    // Clear existing options
+    botDropdown.innerHTML = '<option value="">Select Bot</option>';
+
+    // Add new options based on botList
+    botList.forEach((bot) => {
+        const option = document.createElement('option');
+        option.value = bot.name;
+        option.textContent = bot.name;
+        botDropdown.appendChild(option);
+    });
+}
+
+
+
+// Set selectedObject when a bot is chosen from the dropdown
+botDropdown.addEventListener('change', (event) => {
+    const selectedBotName = event.target.value;
+
+    if (selectedBotName) {
+        // Find the selected bot from botList
+        const selectedBot = botList.find((bot) => bot.name === selectedBotName);
+
+        if (selectedBot) {
+            selectedObject = selectedBot;  // Update selectedObject with the selected bot
+            console.log(`Selected Bot: ${selectedObject.name}`);
+        }
+    } else {
+        selectedObject = null;  // If no bot is selected, set selectedObject to null
+    }
+});
+
 // ================== WINDOW RESIZE HANDLER ==================
 function handleWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -160,70 +196,32 @@ function handleMouseUp() {
     }
 }
 
-// ================== DISPOSAL FUNCTION ==================
-function disposeObject(object) {
-    if (object.geometry) {
-        object.geometry.dispose(); // Dispose of the geometry
-    }
+// // ================== DISPOSAL FUNCTION ==================
+// function disposeObject(object) {
+//     if (object.geometry) {
+//         object.geometry.dispose(); // Dispose of the geometry
+//     }
 
-    if (object.material) {
-        if (Array.isArray(object.material)) {
-            object.material.forEach(material => material.dispose()); // Dispose of all materials
-        } else {
-            object.material.dispose(); // Dispose of single material
-        }
-    }
-}
+//     if (object.material) {
+//         if (Array.isArray(object.material)) {
+//             object.material.forEach(material => material.dispose()); // Dispose of all materials
+//         } else {
+//             object.material.dispose(); // Dispose of single material
+//         }
+//     }
+// }
 
-// Dispose of the model when no longer needed
-function disposeModel(model) {
-    model.traverse((object) => {
-        disposeObject(object); // Dispose each object in the model
-    });
+// // Dispose of the model when no longer needed
+// function disposeModel(model) {
+//     model.traverse((object) => {
+//         disposeObject(object); // Dispose each object in the model
+//     });
 
-    scene.remove(model); // Remove model from the scene
-}
-
-// ================== MODEL LOADING ==================
-// You already have the loadBotModel and loadLayoutModel functions
-// Ensure you call disposeModel when needed
-
-function loadBotModel() {
-    loader.load('./assets/Xbot.glb', (gltf) => {
-        if (botModel) disposeModel(botModel); // Dispose previous model if it exists
-
-        botModel = gltf.scene;
-        scene.add(botModel);
-        botModel.scale.set(50, 50, 50);
-        botModel.position.set(0, 0, 0);
-
-        botModel.traverse((object) => {
-            if (object.isMesh) object.castShadow = true; // Enable shadow casting
-        });
-
-        const animations = gltf.animations;
-        mixer = new THREE.AnimationMixer(botModel);
-
-        selectedObject = botModel;
-        animations.forEach((clip) => {
-            const name = clip.name;
-            if (baseActions[name]) {
-                const action = mixer.clipAction(clip);
-                activateAction(action);
-                baseActions[name].action = action;
-                allActions.push(action);
-            }
-        });
-    }, undefined, (error) => {
-        console.error('Error loading bot model:', error);
-    });
-}
-
-
-
+//     scene.remove(model); // Remove model from the scene
+// }
 function loadLayoutModel() {
     loader.load('./assets/Main_Layout.gltf', (gltf) => {
-        if (layoutModel) disposeModel(layoutModel); // Dispose previous layout if it exists
+        // if (layoutModel) disposeModel(layoutModel); // Dispose previous layout if it exists
 
         layoutModel = gltf.scene;
         scene.add(layoutModel);
@@ -233,25 +231,16 @@ function loadLayoutModel() {
         for (let i = 1; i < layoutModel.children.length; i++) {
             collidableObjects.push(layoutModel.children[i]);
         }
-
-        // Load the bot model after the layout model is loaded
-        loadBotModel();
-
-       
     });
+
+    
+    // botList.push(createBotModel('x',50,50,50,0,0));
 }
-
-
-
-
-
 function addBoxHelper(object, color = 0xff0000) {
     const boxHelper = new THREE.BoxHelper(object, color);
     scene.add(boxHelper);
     return boxHelper;
 }
-
-
 // ================== COLLISION DETECTION ==================
 function hasCollision(object) {
  
@@ -397,6 +386,7 @@ function handleKeyDown(event) {
     if (selectedObject) {
         const moveDistance = 10; // Movement distance
         const originalPosition = selectedObject.position.clone(); // Store the original position
+        console.log(selectedObject);
 
         // Move the bot based on the key pressed
         switch (event.code) {
@@ -522,7 +512,6 @@ function createBoxFromPoints(width, height, positionX, positionZ, zoneName) {
     // Return the group for further manipulation if needed
     return { zoneGroup,zoneName, hasEntered: false };
 }
-
 function deleteZone(zoneName) {
     // Find the zone object by its name in the array
     const zoneIndex = zoneList.findIndex(zone => zone.zoneName === zoneName);
@@ -592,6 +581,42 @@ function checkBotInZone(bot) {
     });
 }
 
+// ================== MODEL LOADING ==================
+// You already have the loadBotModel and loadLayoutModel functions
+// Ensure you call disposeModel when needed
+
+async function createBotModel(botName, scaleX, scaleY, scaleZ, posX, posZ) {
+    return new Promise((resolve, reject) => {
+        loader.load('./assets/Xbot.glb', (gltf) => {
+            botModel = gltf.scene;
+            scene.add(botModel);
+            botModel.name = botName;
+            botModel.scale.set(scaleX, scaleY, scaleZ);
+            botModel.position.set(posX, 0, posZ);
+
+            botModel.traverse((object) => {
+                if (object.isMesh) object.castShadow = true; // Enable shadow casting
+            });
+
+            const animations = gltf.animations;
+            mixer = new THREE.AnimationMixer(botModel);
+            animations.forEach((clip) => {
+                const name = clip.name;
+                if (baseActions[name]) {
+                    const action = mixer.clipAction(clip);
+                    activateAction(action);
+                    baseActions[name].action = action;
+                    allActions.push(action);
+                }
+            });
+
+            resolve(botModel); // Resolve with botModel when done
+        }, undefined, (error) => {
+            console.error('Error loading bot model:', error);
+            reject(error); // Reject in case of error
+        });
+    });
+}
 // ================== ANIMATION CONTROLS ==================
 function createPanel() {
 
@@ -612,8 +637,8 @@ function createPanel() {
     zoneFolder.add(zoneData, 'zoneName').name('Zone Name');
     zoneFolder.add(zoneData, 'width', 1, 100).name('Width');
     zoneFolder.add(zoneData, 'height', 1, 100).name('Height');
-    zoneFolder.add(zoneData, 'positionX', -500, 500).name('Position X');
-    zoneFolder.add(zoneData, 'positionZ', -500, 500).name('Position Z');
+    zoneFolder.add(zoneData, 'positionX', -900, 900).name('Position X');
+    zoneFolder.add(zoneData, 'positionZ', -400, 400).name('Position Z');
 
     // Button to create zone
     zoneFolder.add({
@@ -660,10 +685,97 @@ function createPanel() {
     function updateZoneList() {
         const zoneNames = zoneList.map(zone => zone.zoneName);
         zoneDropdown = zoneDropdown.options(zoneNames.length ? zoneNames : ['']);
-        zoneDropdown.setValue(zoneNames.length ? zoneNames[0] : '');
+        console.log("----------", zoneDropdown.setValue(zoneNames.length ? zoneNames[0] : ''));
     }
 
     zoneFolder.open();
+
+    // Folder for Bot-Model
+    const botFolder = panel.addFolder('Bot Management');
+
+    // Bot settings object
+    const botData = {
+        botName: 'Bot 1', // Default bot name
+        scaleX: 50,
+        scaleY: 50,
+        scaleZ: 50,
+        posX: 0,
+        posY: 0,
+        posZ: 0
+    };
+
+    // Add controls for bot name, scale, and position
+    botFolder.add(botData, 'botName').name('Bot Name'); // Text input for bot name
+    botFolder.add(botData, 'scaleX', 1, 100).name('Scale X');
+    botFolder.add(botData, 'scaleY', 1, 100).name('Scale Y');
+    botFolder.add(botData, 'scaleZ', 1, 100).name('Scale Z');
+    botFolder.add(botData, 'posX', -500, 500).name('Position X');
+    botFolder.add(botData, 'posY', -500, 500).name('Position Y');
+    botFolder.add(botData, 'posZ', -500, 500).name('Position Z');
+
+    // Function to handle bot creation and update the bot list
+    botFolder.add({
+        async createBot() {
+            const botName = botData.botName;
+
+            if (!botList.some(bot => bot.name === botName)) {
+                try {
+                    const newBot = await createBotModel(
+                        botData.botName,
+                        botData.scaleX,
+                        botData.scaleY,
+                        botData.scaleZ,
+                        botData.posX,
+                        botData.posZ
+                    );
+
+                    botList.push(newBot); // Add the created bot to the list
+                    console.log('Bot List:', botList);
+
+                    // // Update the bot dropdown when a new bot is created
+                    // updateBotList();
+                    // Call this function whenever the bot list changes
+                    updateBotDropdown();
+                
+
+                } catch (error) {
+                    console.error('Failed to create bot:', error);
+                }
+            } else {
+                console.warn('Bot with this name already exists');
+            }
+        }
+    }, 'createBot').name('Create Bot');
+
+    // let botDropdown = botFolder.add({selectedBot: ''}, 'selectedBot', botList.map((bot) => bot.name)).name('Select Bot');
+
+    // // Function to update dropdown list when zones are added or deleted
+    // function updateBotList() {
+    //     const botNames = botList.map(bot => bot.name);
+        
+    //     // Save the current selected name before updating dropdown options
+    //     const currentSelectedName = botDropdown.getValue();
+    
+    //     // Update the dropdown options (only when the bot list changes, not on user selection)
+    //     botDropdown = botDropdown.options(botNames.length ? botNames : ['']);
+    
+    //     // Set the value to the previously selected name or default to the first bot
+    //     const selectedName = botNames.includes(currentSelectedName) ? currentSelectedName : (botNames.length ? botNames[0] : '');
+    //     botDropdown.setValue(selectedName);  // Update the dropdown value based on bot list changes
+    
+    //     // Optionally update the selected bot object in case the current selection has changed
+    //     const selectedBot = botList.find((bot) => bot.name === selectedName);
+    //     if (selectedBot) {
+    //         selectedObject = selectedBot;
+    //         console.log(`Selected bot after list update: ${selectedObject.name}`);
+    //     }
+    // }
+    
+
+
+
+    botFolder.open();
+
 
     const folder1 = panel.addFolder( 'Base Actions' );
     const folder3 = panel.addFolder( 'General Speed' );
